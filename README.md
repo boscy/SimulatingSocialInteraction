@@ -1,6 +1,6 @@
 # Simulating Social Interaction in times of COVID restrictions
 
-![Image](https://github.com/boscy/SimulatingSocialInteraction/blob/main/full_model_screenshot.png?raw=true)
+![Image](https://github.com/boscy/SimulatingSocialInteraction/blob/main/img/full_model_screenshot.png?raw=true)
 
 This NetLogo model was made as a part of the master's project for the University of Groningen.
 
@@ -9,5 +9,5 @@ In this project, a novel agent-based model was developed that aims to explore so
 An overview of the agents' behaviour in the model can be described by the following flowchart:
 
 
-![Image](https://github.com/boscy/SimulatingSocialInteraction/blob/main/flowchart_image.png?raw=true)
+![Image](https://github.com/boscy/SimulatingSocialInteraction/blob/main/img/flowchart_image.png?raw=true)
 
