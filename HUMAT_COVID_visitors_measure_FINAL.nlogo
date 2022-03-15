@@ -22,6 +22,15 @@ globals [
   mean_difference_in_hours
   behavioural-alternatives
   percentage_in_dilemma
+
+  total_contacts
+  total_dilemmas
+  total_opinion_mean
+  total_opinion_sd
+  average_contacts_per_day_per_humat
+  average_dilemmas_per_day_per_humat
+  average_opinion_sd_over_time
+  average_opinion_mean_over_time
 ]
 breed [HUMATS HUMAT]
 
@@ -34,7 +43,7 @@ HUMATS-own [
   desired_n_contacts_this_day
   desired_hours_of_contact_this_day
   difference_hours
-
+  total_n_contacts_at_end_of_day
   stubbornness
 
   in_dilemma?
@@ -94,6 +103,10 @@ to setup
   determine-color
   set day 0
   set hour 0
+  set total_contacts 0
+  set total_dilemmas 0
+  set total_opinion_mean 0
+  set total_opinion_sd 0
   reset-ticks
   update-plots
 end
@@ -109,7 +122,9 @@ to go
       set day day + 1
       ask humats [set difference_hours hours_of_contact_this_day - desired_hours_of_contact_this_day]
       set mean_hours mean [hours_of_contact_this_day] of HUMATS
+
       apply-day-changes  ; changes are applied after every 24 hours, opinions and satisfaction levels are adjusted
+      determine-global-totals-and-averages
     ]
     determine-color
     determine-desired-hours
@@ -131,6 +146,20 @@ end
 to-report stop-condition
   if stop-at-day-hundred? and day = 100 [report TRUE]
   report FALSE
+end
+
+to determine-global-totals-and-averages
+  ; Determines the totals for contacts/dilemmas/opinion/sd etc. for creating data
+
+  set average_contacts_per_day_per_humat (total_contacts / day) / N-HUMATS
+  set average_dilemmas_per_day_per_humat (total_dilemmas / day) / N-HUMATS
+
+  set total_opinion_sd total_opinion_sd + standard-deviation [opinion_measure] of humats
+  set total_opinion_mean total_opinion_mean + mean [opinion_measure] of humats
+
+  set average_opinion_sd_over_time (total_opinion_sd / day)
+  set average_opinion_mean_over_time (total_opinion_mean / day)
+
 end
 
 
@@ -184,6 +213,7 @@ end
 
 
 
+
 to make-contact
 ; In this function HUMATS attempt to make contact with friends in their network. The alter has to accept this contact in order to create an active connection.
 
@@ -220,6 +250,7 @@ to make-contact
     ]
 
     if contact-made? [
+      set total_contacts total_contacts + 1
       set n_contacts_this_day n_contacts_this_day + 1
       if n_contacts_this_day > allowed_contacts_per_day [
         set opinion_difference_this_day opinion_difference_this_day - random-float (opinion_measure * break-the-rule-effect)] ; Slightly decrease opinion if HUMAT decides to not follow the rule
@@ -262,6 +293,7 @@ to apply-day-changes
 ;    if extra_exp_contact > 0.8 [show extra_exp_contact]
 
     set hours_of_contact_this_day 0
+    set total_n_contacts_at_end_of_day n_contacts_this_day   ;Store final contacts the HUMATs had
     set n_contacts_this_day 0
 
     update-opinions
@@ -794,7 +826,8 @@ to check-dilemmas
     ifelse abs (satisfaction-contact - satisfaction-no-contact) < dilemma_threshold [
       set in_dilemma? TRUE
       set behaviour one-of (list "contact" "no-contact")
-      set #dilemmas #dilemmas + 1]
+      set #dilemmas #dilemmas + 1
+      set total_dilemmas total_dilemmas + 1]
     [ set in_dilemma? FALSE ]
   ]
   set percentage_in_dilemma count humats with [in_dilemma?] / N-HUMATS
@@ -1096,7 +1129,7 @@ allowed_contacts_per_day
 allowed_contacts_per_day
 1
 10
-2.0
+10.0
 1
 1
 NIL
@@ -1113,10 +1146,10 @@ Visitors-measure strength, allowed number of activated connections for an agent 
 1
 
 TEXTBOX
-1468
-12
-1618
-49
+1464
+10
+1614
+47
 Output
 30
 0.0
@@ -1140,7 +1173,7 @@ CHOOSER
 initialization
 initialization
 "random uniform" "RIVM survey: 19-23 aug 2020" "RIVM survey: 30 sep - 4 oct 2020" "RIVM survey: 11-15 nov 2020" "RIVM survey: 30 dec 2020 - 3 jan 2021" "RIVM survey: 10-14 feb 2021" "RIVM survey: 24-28 mar 2021"
-3
+2
 
 MONITOR
 1442
@@ -1198,11 +1231,11 @@ count HUMATS with [opinion_measure < 20] / count HUMATS * 100
 11
 
 TEXTBOX
-1133
-71
-1519
-127
-To which extent do HUMATS support the maximum visitors measure (higher value equals bigger support):\n\n     20<\t                  20-39                      40-59                 60-79                   >80
+1136
+82
+1522
+138
+To which extent do HUMATS support the maximum visitors measure (higher value equals bigger support):\n     20<\t                  20-39                      40-59                 60-79                   >80
 11
 0.0
 1
@@ -1725,9 +1758,9 @@ Other parameters:
 1
 
 TEXTBOX
-1483
+1478
 50
-1633
+1628
 69
 Opinions:
 15
@@ -1777,11 +1810,11 @@ Needs and Satisfactions:
 1
 
 TEXTBOX
-1577
-88
-1815
-116
-Average opinions (overall and per behaviour):
+1535
+106
+1856
+134
+Average opinions on this moment (overall and per behaviour):
 11
 0.0
 1
@@ -1903,7 +1936,7 @@ SWITCH
 57
 stop-at-day-hundred?
 stop-at-day-hundred?
-0
+1
 1
 -1000
 
@@ -2302,34 +2335,52 @@ NetLogo 6.2.0
       <value value="1"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="experiment-average-100" repetitions="100" runMetricsEveryStep="true">
+  <experiment name="Single_run" repetitions="1" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <timeLimit steps="2400"/>
-    <metric>mean [opinion_measure] of HUMATS</metric>
+    <metric>sort [opinion_measure] of HUMATs</metric>
     <enumeratedValueSet variable="N-HUMATS">
       <value value="100"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="min_attraction_dif">
-      <value value="10"/>
-    </enumeratedValueSet>
     <enumeratedValueSet variable="initialization">
-      <value value="&quot;RIVM survey: 19-23 aug 2020&quot;"/>
+      <value value="&quot;RIVM survey: 24-28 mar 2021&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="allowed_contacts_per_day">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="experiential-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="false"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="repulsion_dif">
       <value value="50"/>
     </enumeratedValueSet>
+    <enumeratedValueSet variable="dilemma_threshold">
+      <value value="0.05"/>
+    </enumeratedValueSet>
     <enumeratedValueSet variable="break-the-rule-effect">
       <value value="0.02"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
-      <value value="0.01"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="adhere-to-rule-effect">
       <value value="0.04"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="inquiry-opinion-change">
       <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
+      <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="false"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="social-influence-per-tick">
       <value value="0.001"/>
@@ -2352,23 +2403,29 @@ NetLogo 6.2.0
     <enumeratedValueSet variable="make_contact_probability">
       <value value="10"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="allowed_contacts_per_day">
-      <value value="6"/>
-    </enumeratedValueSet>
   </experiment>
-  <experiment name="single_run" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="100_Runs_average" repetitions="100" runMetricsEveryStep="true">
     <setup>setup</setup>
     <go>go</go>
     <timeLimit steps="2400"/>
-    <metric>sort [opinion_measure] of HUMATs</metric>
+    <metric>mean [opinion_measure] of HUMATs</metric>
     <enumeratedValueSet variable="N-HUMATS">
       <value value="100"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="min_attraction_dif">
-      <value value="10"/>
-    </enumeratedValueSet>
     <enumeratedValueSet variable="initialization">
-      <value value="&quot;RIVM survey: 11-15 nov 2020&quot;"/>
+      <value value="&quot;RIVM survey: 24-28 mar 2021&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="allowed_contacts_per_day">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="experiential-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="false"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="repulsion_dif">
       <value value="50"/>
@@ -2377,16 +2434,22 @@ NetLogo 6.2.0
       <value value="0.05"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="break-the-rule-effect">
-      <value value="0.01"/>
+      <value value="0.02"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="adhere-to-rule-effect">
-      <value value="0.02"/>
+      <value value="0.04"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="inquiry-opinion-change">
       <value value="0.2"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
       <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="false"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="social-influence-per-tick">
       <value value="0.001"/>
@@ -2399,6 +2462,138 @@ NetLogo 6.2.0
     </enumeratedValueSet>
     <enumeratedValueSet variable="no_contact_accept_probability">
       <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values_satisfaction_opinion_contribution">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry_probability">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="make_contact_probability">
+      <value value="10"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="100_runs_average_visitor_measure" repetitions="100" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="2400"/>
+    <metric>mean [opinion_measure] of HUMATs</metric>
+    <enumeratedValueSet variable="N-HUMATS">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initialization">
+      <value value="&quot;random uniform&quot;"/>
+    </enumeratedValueSet>
+    <steppedValueSet variable="allowed_contacts_per_day" first="1" step="1" last="10"/>
+    <enumeratedValueSet variable="experiential-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="dilemma_threshold">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="break-the-rule-effect">
+      <value value="0.02"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="adhere-to-rule-effect">
+      <value value="0.04"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry-opinion-change">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
+      <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="social-influence-per-tick">
+      <value value="0.001"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="max_attraction_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="no_contact_accept_probability">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values_satisfaction_opinion_contribution">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry_probability">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="make_contact_probability">
+      <value value="10"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="importances_sweep" repetitions="100" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="2400"/>
+    <metric>average_contacts_per_day_per_humat</metric>
+    <metric>average_dilemmas_per_day_per_humat</metric>
+    <metric>average_opinion_sd_over_time</metric>
+    <metric>average_opinion_mean_over_time</metric>
+    <enumeratedValueSet variable="N-HUMATS">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <steppedValueSet variable="experiential-importance-parameter" first="0" step="0.2" last="1"/>
+    <steppedValueSet variable="values-importance-parameter" first="0" step="0.2" last="1"/>
+    <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initialization">
+      <value value="&quot;random uniform&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="dilemma_threshold">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="adhere-to-rule-effect">
+      <value value="0.04"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
+      <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry-opinion-change">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="break-the-rule-effect">
+      <value value="0.02"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="social-influence-per-tick">
+      <value value="0.001"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="no_contact_accept_probability">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="max_attraction_dif">
+      <value value="50"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="values_satisfaction_opinion_contribution">
       <value value="0.5"/>
@@ -2411,21 +2606,102 @@ NetLogo 6.2.0
     </enumeratedValueSet>
     <enumeratedValueSet variable="allowed_contacts_per_day">
       <value value="2"/>
+      <value value="4"/>
+      <value value="6"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="100_runs_average" repetitions="100" runMetricsEveryStep="true">
+  <experiment name="importances_sweep_final_values" repetitions="100" runMetricsEveryStep="false">
     <setup>setup</setup>
     <go>go</go>
     <timeLimit steps="2400"/>
-    <metric>mean [opinion_measure] of HUMATs</metric>
+    <metric>mean [n_contacts_this_day] of HUMATS</metric>
+    <metric>percentage_in_dilemma</metric>
+    <metric>standard-deviation [opinion_measure] of HUMATS</metric>
+    <metric>mean [opinion_measure] of HUMATS</metric>
     <enumeratedValueSet variable="N-HUMATS">
       <value value="100"/>
     </enumeratedValueSet>
+    <steppedValueSet variable="experiential-importance-parameter" first="0" step="0.2" last="1"/>
+    <steppedValueSet variable="values-importance-parameter" first="0" step="0.2" last="1"/>
     <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initialization">
+      <value value="&quot;random uniform&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="dilemma_threshold">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="adhere-to-rule-effect">
+      <value value="0.04"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
+      <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry-opinion-change">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="break-the-rule-effect">
+      <value value="0.02"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="social-influence-per-tick">
+      <value value="0.001"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="no_contact_accept_probability">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="max_attraction_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values_satisfaction_opinion_contribution">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry_probability">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="make_contact_probability">
       <value value="10"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="allowed_contacts_per_day">
+      <value value="2"/>
+      <value value="4"/>
+      <value value="6"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="Single_run_contacts" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="2400"/>
+    <metric>sort [total_n_contacts_at_end_of_day] of HUMATs</metric>
+    <enumeratedValueSet variable="N-HUMATS">
+      <value value="100"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="initialization">
       <value value="&quot;RIVM survey: 24-28 mar 2021&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="allowed_contacts_per_day">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="experiential-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="false"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="repulsion_dif">
       <value value="50"/>
@@ -2434,16 +2710,22 @@ NetLogo 6.2.0
       <value value="0.05"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="break-the-rule-effect">
-      <value value="0.01"/>
+      <value value="0.02"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="adhere-to-rule-effect">
-      <value value="0.02"/>
+      <value value="0.04"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="inquiry-opinion-change">
       <value value="0.2"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
       <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="false"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="social-influence-per-tick">
       <value value="0.001"/>
@@ -2466,8 +2748,139 @@ NetLogo 6.2.0
     <enumeratedValueSet variable="make_contact_probability">
       <value value="10"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="allowed_contacts_per_day">
+  </experiment>
+  <experiment name="contacts_cumulative" repetitions="100" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="2400"/>
+    <metric>total_contacts</metric>
+    <enumeratedValueSet variable="N-HUMATS">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initialization">
+      <value value="&quot;random uniform&quot;"/>
+    </enumeratedValueSet>
+    <steppedValueSet variable="allowed_contacts_per_day" first="1" step="1" last="10"/>
+    <enumeratedValueSet variable="experiential-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="dilemma_threshold">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="break-the-rule-effect">
+      <value value="0.02"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="adhere-to-rule-effect">
+      <value value="0.04"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry-opinion-change">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
+      <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="social-influence-per-tick">
+      <value value="0.001"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="max_attraction_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="no_contact_accept_probability">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values_satisfaction_opinion_contribution">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry_probability">
       <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="make_contact_probability">
+      <value value="10"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="opinion_behavior" repetitions="100" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="2400"/>
+    <metric>count humats with [behaviour = "no-contact"]</metric>
+    <enumeratedValueSet variable="N-HUMATS">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="initialization">
+      <value value="&quot;random uniform&quot;"/>
+    </enumeratedValueSet>
+    <steppedValueSet variable="allowed_contacts_per_day" first="1" step="1" last="10"/>
+    <enumeratedValueSet variable="experiential-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="min_attraction_dif">
+      <value value="25"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="stop-at-day-hundred?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="dilemma_threshold">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="break-the-rule-effect">
+      <value value="0.02"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="adhere-to-rule-effect">
+      <value value="0.04"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry-opinion-change">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="extra_exp_satisfaction_per_hour">
+      <value value="0.01"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values-importance-parameter">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="parametrize-importances?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="social-influence-per-tick">
+      <value value="0.001"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="repulsion?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="max_attraction_dif">
+      <value value="50"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="no_contact_accept_probability">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="values_satisfaction_opinion_contribution">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="inquiry_probability">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="make_contact_probability">
+      <value value="10"/>
     </enumeratedValueSet>
   </experiment>
 </experiments>
