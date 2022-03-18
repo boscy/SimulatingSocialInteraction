@@ -1,4 +1,4 @@
-# Simulating Social Interaction in times of COVID restrictions
+# Simulating Social Interaction in Times of COVID Restrictions
 
 ![Image](https://github.com/boscy/SimulatingSocialInteraction/blob/main/img/full_model_screenshot.png?raw=true)
 
